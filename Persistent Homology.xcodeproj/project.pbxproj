@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A58A47102B7C42E6001F839F /* compute.metal in Sources */ = {isa = PBXBuildFile; fileRef = A58A470F2B7C42E6001F839F /* compute.metal */; };
+		A58A47122B7C4331001F839F /* compute.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58A47112B7C4331001F839F /* compute.swift */; };
 		A5DCF4E22B60019A003BD225 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5DCF4E12B60019A003BD225 /* main.swift */; };
-		A5DCF4EB2B600536003BD225 /* compute.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5DCF4EA2B600536003BD225 /* compute.swift */; };
+		A5DCF4EB2B600536003BD225 /* ph_simple.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5DCF4EA2B600536003BD225 /* ph_simple.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -24,9 +26,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A58A470F2B7C42E6001F839F /* compute.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = compute.metal; sourceTree = "<group>"; };
+		A58A47112B7C4331001F839F /* compute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = compute.swift; sourceTree = "<group>"; };
 		A5DCF4DE2B60019A003BD225 /* Persistent Homology */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "Persistent Homology"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5DCF4E12B60019A003BD225 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		A5DCF4EA2B600536003BD225 /* compute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = compute.swift; sourceTree = "<group>"; };
+		A5DCF4EA2B600536003BD225 /* ph_simple.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ph_simple.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,18 +63,12 @@
 		A5DCF4E02B60019A003BD225 /* Persistent Homology */ = {
 			isa = PBXGroup;
 			children = (
-				A5DCF4EC2B6005E9003BD225 /* input */,
 				A5DCF4E12B60019A003BD225 /* main.swift */,
-				A5DCF4EA2B600536003BD225 /* compute.swift */,
+				A5DCF4EA2B600536003BD225 /* ph_simple.swift */,
+				A58A470F2B7C42E6001F839F /* compute.metal */,
+				A58A47112B7C4331001F839F /* compute.swift */,
 			);
 			path = "Persistent Homology";
-			sourceTree = "<group>";
-		};
-		A5DCF4EC2B6005E9003BD225 /* input */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = input;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -131,8 +129,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A58A47102B7C42E6001F839F /* compute.metal in Sources */,
+				A58A47122B7C4331001F839F /* compute.swift in Sources */,
 				A5DCF4E22B60019A003BD225 /* main.swift in Sources */,
-				A5DCF4EB2B600536003BD225 /* compute.swift in Sources */,
+				A5DCF4EB2B600536003BD225 /* ph_simple.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

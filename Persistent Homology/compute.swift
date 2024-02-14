@@ -1,78 +1,169 @@
-//
-//  compute.swift
-//  Persistent Homology
-//
-//  Created by Petr Tsopa on 23.01.24.
-//
-
 import Foundation
+import Metal
 
-struct Matrix {
-    var n: size_t
-    var elements: [[Bool]]
-}
+class MetalPH {
+    let device: MTLDevice
+    let computeLowFunctionPSO: MTLComputePipelineState
+    let reduceMatrixFunctionPSO: MTLComputePipelineState
+    let commandQueue: MTLCommandQueue
 
-func readFile(file_path: String) -> Matrix? {
-    var matrix: Matrix? = nil
-    do {
-        let text = try String(contentsOf: URL(fileURLWithPath: file_path), encoding: .utf8)
-        for (i, line) in text.components(separatedBy: .newlines).enumerated() {
-            if matrix == nil {
-                let n = size_t(line)!
-                matrix = Matrix(n: n, elements: [[Bool]](repeating: [Bool](repeating: false, count: n), count: n))
-            } else {
-                let indices = line.split(separator: " ").compactMap { size_t($0) }
-                for j in indices {
-                    matrix!.elements[i - 1][j] = true
-                }
+    var matrixSizeValue: size_t?
+    var matrixSize: MTLBuffer?
+    var matrix: MTLBuffer?
+    var low: MTLBuffer?
+    var lowClass: MTLBuffer?
+
+    init?(_ device: MTLDevice) {
+        self.device = device
+        
+        let defaultLibrary = self.device.makeDefaultLibrary()
+        if (defaultLibrary == nil) {
+            NSLog("Could not find library")
+            return nil
+        }
+        
+        let computeLowFunction = defaultLibrary!.makeFunction(name: "compute_low")
+        if (computeLowFunction == nil) {
+            NSLog("Could not find compute_low function")
+            return nil
+        }
+        
+        do {
+            try self.computeLowFunctionPSO = self.device.makeComputePipelineState(function: computeLowFunction!)
+        } catch {
+            NSLog("Could not create compute_low pipeline")
+            return nil
+        }
+        
+        let reduceMatrixFunction = defaultLibrary!.makeFunction(name: "reduce_matrix")
+        if (reduceMatrixFunction == nil) {
+            NSLog("Could not find reduce_matrix function")
+            return nil
+        }
+        
+        do {
+            try self.reduceMatrixFunctionPSO = self.device.makeComputePipelineState(function: reduceMatrixFunction!)
+        } catch {
+            NSLog("Could not create reduce_matrix pipeline")
+            return nil
+        }
+        
+        self.commandQueue = self.device.makeCommandQueue()!
+    }
+    
+    func loadData(matrix: Matrix) {
+        self.matrixSizeValue = matrix.n
+        self.matrixSize = self.device.makeBuffer(length: MemoryLayout<UInt>.stride, options: MTLResourceOptions.storageModeShared)!
+        self.matrix = self.device.makeBuffer(length: matrix.n * matrix.n * MemoryLayout<Bool>.stride, options: MTLResourceOptions.storageModeShared)!
+        self.low = self.device.makeBuffer(length: matrix.n * MemoryLayout<Int>.stride, options: MTLResourceOptions.storageModeShared)!
+        self.lowClass = self.device.makeBuffer(length: matrix.n * MemoryLayout<UInt>.stride, options: MTLResourceOptions.storageModeShared)!
+
+        let matrixSizePtr = self.matrixSize!.contents().assumingMemoryBound(to: UInt.self)
+        matrixSizePtr[0] = UInt(matrix.n)
+
+        let matrixPtr: UnsafeMutablePointer<Bool> = self.matrix!.contents().assumingMemoryBound(to: Bool.self)
+        for i in 0 ..< matrix.n {
+            for j in 0 ..< matrix.n {
+                let index = i * matrix.n + j
+                matrixPtr[index] = matrix.columns[i][j]
             }
         }
     }
-    catch (let error) {
-        print(error)
-        return nil
-    }
-    return matrix
-}
+    
+    func encodeComputeLowCommand(_ computeEncoder: MTLComputeCommandEncoder) {
+        computeEncoder.setComputePipelineState(self.computeLowFunctionPSO)
+        computeEncoder.setBuffer(self.matrix, offset: 0, index: 0)
+        computeEncoder.setBuffer(self.matrixSize, offset: 0, index: 1)
+        computeEncoder.setBuffer(self.low, offset: 0, index: 2)
 
-func getLow(column: [Bool]) -> Int {
-    for i in (0...column.count-1).reversed() {
-        if column[i] {
-            return i
+        let gridSize: MTLSize = MTLSizeMake(self.matrixSizeValue!, 1, 1)
+
+        var threadGroupSizeInt: Int = self.computeLowFunctionPSO.maxTotalThreadsPerThreadgroup
+        if (threadGroupSizeInt > self.matrixSizeValue!) {
+            threadGroupSizeInt = self.matrixSizeValue!
         }
-    }
-    return -1
-}
+        let threadGroupSize: MTLSize = MTLSizeMake(threadGroupSizeInt, 1, 1)
 
-func reduceMatrixSimple(matrix: inout Matrix) -> [Int] {
-    var low = [Int](repeating: -1, count: matrix.n)
-    for i in 1...matrix.n-1 {
-        let column = matrix.elements[i]
-        low[i] = getLow(column: column)
-        for j in 0...i-1 {
-            if low[j] == low[i] {
-                for k in 0...matrix.n-1 {
-                    matrix.elements[i][k] = matrix.elements[i][k] != matrix.elements[j][k]
+        computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+    }
+    
+    func runComputeLowCommand() {
+        let commandBuffer: MTLCommandBuffer = self.commandQueue.makeCommandBuffer()!
+        let computeEncoder: MTLComputeCommandEncoder = commandBuffer.makeComputeCommandEncoder()!
+
+        self.encodeComputeLowCommand(computeEncoder)
+
+        computeEncoder.endEncoding()
+        commandBuffer.commit()
+
+        commandBuffer.waitUntilCompleted()
+    }
+    
+    func encodeReduceMatrixCommand(_ computeEncoder: MTLComputeCommandEncoder) {
+        computeEncoder.setComputePipelineState(self.reduceMatrixFunctionPSO)
+        computeEncoder.setBuffer(self.matrix, offset: 0, index: 0)
+        computeEncoder.setBuffer(self.matrixSize, offset: 0, index: 1)
+        computeEncoder.setBuffer(self.lowClass, offset: 0, index: 2)
+
+        let gridSize: MTLSize = MTLSizeMake(self.matrixSizeValue!, 1, 1)
+
+        var threadGroupSizeInt: Int = self.reduceMatrixFunctionPSO.maxTotalThreadsPerThreadgroup
+        if (threadGroupSizeInt > self.matrixSizeValue!) {
+            threadGroupSizeInt = self.matrixSizeValue!
+        }
+        let threadGroupSize: MTLSize = MTLSizeMake(threadGroupSizeInt, 1, 1)
+
+        computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+    }
+    
+    func runReduceMatrixCommand() {
+        let commandBuffer: MTLCommandBuffer = self.commandQueue.makeCommandBuffer()!
+        let computeEncoder: MTLComputeCommandEncoder = commandBuffer.makeComputeCommandEncoder()!
+
+        self.encodeReduceMatrixCommand(computeEncoder)
+
+        computeEncoder.endEncoding()
+        commandBuffer.commit()
+
+        commandBuffer.waitUntilCompleted()
+    }
+    
+    func run(matrix: Matrix) -> [Int] {
+        loadData(matrix: matrix)
+
+        while true {
+            runComputeLowCommand()
+            
+            var isOver = true
+
+            let lowPtr: UnsafeMutablePointer<Int> = self.low!.contents().assumingMemoryBound(to: Int.self)
+            let lowClassPtr: UnsafeMutablePointer<Int> = self.lowClass!.contents().assumingMemoryBound(to: Int.self)
+            var reverseLow = [Int](repeating: -1, count: self.matrixSizeValue!)
+            for i in 0 ..< self.matrixSizeValue! {
+                lowClassPtr[i] = -1
+                if lowPtr[i] != -1 {
+                    let curLow = lowPtr[i]
+                    if reverseLow[curLow] == -1 {
+                        reverseLow[curLow] = i
+                    } else {
+                        lowClassPtr[i] = reverseLow[curLow]
+                        isOver = false
+                    }
                 }
             }
-        }
-    }
-    return low
-}
 
-func writePairsToFile(file_path: String, low: [Int]) -> Bool {
-    var output = ""
-    for i in 0...low.count-1 {
-        if low[i] != -1 {
-            output += String(i) + " " + String(low[i]) + "\n"
+            if isOver {
+                break
+            }
+
+            runReduceMatrixCommand()
         }
+        
+        var lowResult = [Int](repeating: -1, count: self.matrixSizeValue!)
+        let lowPtr: UnsafeMutablePointer<Int> = self.low!.contents().assumingMemoryBound(to: Int.self)
+        for i in 0 ..< self.matrixSizeValue! {
+            lowResult[i] = lowPtr[i]
+        }
+        return lowResult
     }
-    do {
-        try output.write(toFile: file_path, atomically: false, encoding: .utf8)
-    }
-    catch (let error) {
-        print(error)
-        return false
-    }
-    return true
 }
