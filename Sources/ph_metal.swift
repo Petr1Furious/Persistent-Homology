@@ -16,13 +16,10 @@ class MetalPH {
     init?(_ device: MTLDevice) {
         self.device = device
         
-        let defaultLibrary = self.device.makeDefaultLibrary()
-        if (defaultLibrary == nil) {
-            NSLog("Could not find library")
-            return nil
-        }
+        guard let library = try? device.makeDefaultLibrary(bundle: Bundle.module)
+            else { NSLog("Could not create default library"); return nil }
         
-        let computeLowFunction = defaultLibrary!.makeFunction(name: "compute_low")
+        let computeLowFunction = library.makeFunction(name: "compute_low")
         if (computeLowFunction == nil) {
             NSLog("Could not find compute_low function")
             return nil
@@ -35,7 +32,7 @@ class MetalPH {
             return nil
         }
         
-        let reduceMatrixFunction = defaultLibrary!.makeFunction(name: "reduce_matrix")
+        let reduceMatrixFunction = library.makeFunction(name: "reduce_matrix")
         if (reduceMatrixFunction == nil) {
             NSLog("Could not find reduce_matrix function")
             return nil
@@ -105,7 +102,7 @@ class MetalPH {
         computeEncoder.setBuffer(self.matrixSize, offset: 0, index: 1)
         computeEncoder.setBuffer(self.lowClass, offset: 0, index: 2)
 
-        let gridSize: MTLSize = MTLSizeMake(self.matrixSizeValue!, 1, 1)
+        let gridSize: MTLSize = MTLSizeMake(self.matrixSizeValue! * self.matrixSizeValue!, 1, 1)
 
         var threadGroupSizeInt: Int = self.reduceMatrixFunctionPSO.maxTotalThreadsPerThreadgroup
         if (threadGroupSizeInt > self.matrixSizeValue!) {
@@ -138,15 +135,15 @@ class MetalPH {
 
             let lowPtr: UnsafeMutablePointer<Int> = self.low!.contents().assumingMemoryBound(to: Int.self)
             let lowClassPtr: UnsafeMutablePointer<Int> = self.lowClass!.contents().assumingMemoryBound(to: Int.self)
-            var reverseLow = [Int](repeating: -1, count: self.matrixSizeValue!)
+            var inverseLow = [Int](repeating: -1, count: self.matrixSizeValue!)
             for i in 0 ..< self.matrixSizeValue! {
                 lowClassPtr[i] = -1
                 if lowPtr[i] != -1 {
                     let curLow = lowPtr[i]
-                    if reverseLow[curLow] == -1 {
-                        reverseLow[curLow] = i
+                    if inverseLow[curLow] == -1 {
+                        inverseLow[curLow] = i
                     } else {
-                        lowClassPtr[i] = reverseLow[curLow]
+                        lowClassPtr[i] = inverseLow[curLow]
                         isOver = false
                     }
                 }

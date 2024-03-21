@@ -1,0 +1,93 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "swift",
+			"args": [
+				"build",
+				"--product",
+				"persistent-homology"
+			],
+			"env": {},
+			"cwd": "/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology",
+			"disableTaskQueue": true,
+			"dontTriggerTestDiscovery": true,
+			"problemMatcher": [
+				"$swiftc"
+			],
+			"group": "build",
+			"label": "swift: Build Debug persistent-homology",
+			"detail": "swift build --product persistent-homology",
+			"dependsOn": [
+				"Metal Cleanup"
+			]
+		},
+		{
+			"type": "swift",
+			"args": [
+				"build",
+				"-c",
+				"release",
+				"--product",
+				"persistent-homology"
+			],
+			"env": {},
+			"cwd": "/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology",
+			"disableTaskQueue": true,
+			"dontTriggerTestDiscovery": true,
+			"problemMatcher": [
+				"$swiftc"
+			],
+			"group": "build",
+			"label": "swift: Build Release persistent-homology",
+			"detail": "swift build -c release --product persistent-homology",
+			"dependsOn": [
+				"Metal Cleanup"
+			]
+		},
+		{
+			"type": "shell",
+			"command": "xcrun",
+			"args": [
+				"-sdk",
+				"macosx",
+				"metal",
+				"-o",
+				"/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology/.build/ph_metal.ir",
+				"-c",
+				"/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology/MetalSources/ph_metal.metal"
+			],
+			"group": "build",
+			"label": "Build Metal ir"
+		},
+		{
+			"type": "shell",
+			"command": "xcrun",
+			"args": [
+				"-sdk",
+				"macosx",
+				"metallib",
+				"-o",
+				"/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology/Sources/MetalCompiled/default.metallib",
+				"/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology/.build/*.ir",
+			],
+			"group": "build",
+			"label": "Build Metal Library",
+			"dependsOn": [
+				"Build Metal ir"
+			]
+		},
+		{
+			"type": "shell",
+			"command": "rm",
+			"args": [
+				"/Users/petrtsopa/Documents/Persistent_Homology/persistent-homology/.build/*.ir",
+			],
+			"group": "build",
+			"label": "Metal Cleanup",
+			"dependsOn": [
+				"Build Metal Library"
+			]
+		}
+	]
+}

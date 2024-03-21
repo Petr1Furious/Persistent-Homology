@@ -19,10 +19,9 @@ kernel void reduce_matrix(device bool* matrix,
                           device const uint* matrixSize,
                           device const int64_t* lowClass,
                           uint index [[thread_position_in_grid]]) {
-    if (lowClass[index] != -1 && (uint)lowClass[index] != index) {
-        uint curClass = (uint64_t)lowClass[index];
-        for (uint64_t i = 0; i < *matrixSize; i++) {
-            matrix[*matrixSize * index + i] = (matrix[*matrixSize * index + i] != matrix[*matrixSize * curClass + i]);
-        }
+    uint col = index / *matrixSize, row = index % *matrixSize;
+    if (lowClass[col] != -1) {
+        uint curClass = (uint64_t)lowClass[col];
+        matrix[index] = (matrix[index] != matrix[*matrixSize * curClass + row]);
     }
 }
