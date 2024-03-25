@@ -21,7 +21,9 @@ struct SparseMatrix {
             let text = try String(contentsOf: URL(fileURLWithPath: file_path), encoding: .utf8)
             for (i, line) in text.components(separatedBy: .newlines).enumerated() {
                 if i > n {
-                    print("Warning: file too long")
+                    if line != "" {
+                        print("Warning: file too long")
+                    }
                     break
                 }
 
@@ -68,26 +70,37 @@ struct SparseMatrix {
         return low
     }
 
-    mutating func addColumn(col1: UInt32, col2: UInt32, row_index_buffer: inout [UInt32], result_row_index_buffer: inout [UInt32]) {
-        let sum_size = Int((col_end[Int(col1)] - col_start[Int(col1)]) +
-            (col_end[Int(col2)] - col_start[Int(col2)]))
-        if result_row_index_buffer.count < sum_size {
-            result_row_index_buffer += [UInt32](repeating: 0, count: sum_size - result_row_index_buffer.count)
+    func enoughSizeForIteration() -> Bool {
+        for i in 0 ..< n {
+            let col_size = col_end[Int(i)] - col_start[Int(i)]
+            let available_size = i + 1 < n ? col_start[Int(i + 1)] - col_start[Int(i)] : UInt32(row_index.count) - col_start[Int(i)]
+            if col_size * 2 > available_size {
+                return false
+            }
         }
+        return true
+    }
 
+    func enoughSizeForIteration(col: Int) -> Bool {
+        let col_size = col_end[col] - col_start[col]
+        let available_size = col + 1 < n ? col_start[col + 1] - col_start[col] : UInt32(row_index.count) - col_start[col]
+        return col_size * 2 <= available_size
+    }
+
+    mutating func addColumn(col1: UInt32, col2: UInt32, row_index_buffer: inout [UInt32], copy: Bool) throws {
         let end1 = Int(col_end[Int(col1)])
         let end2 = Int(col_end[Int(col2)])
 
         var i = Int(col_start[Int(col1)])
         var j = Int(col_start[Int(col2)])
-        var k = 0
+        var k = Int(col_start[Int(col1)])
         while i < end1 && j < end2 {
             if row_index[i] < row_index[j] {
-                result_row_index_buffer[k] = row_index[i]
+                row_index_buffer[k] = row_index[i]
                 i += 1
                 k += 1
             } else if row_index[i] > row_index[j] {
-                result_row_index_buffer[k] = row_index[j]
+                row_index_buffer[k] = row_index[j]
                 j += 1
                 k += 1
             } else {
@@ -96,12 +109,12 @@ struct SparseMatrix {
             }
         }
         while i < end1 {
-            result_row_index_buffer[k] = row_index[i]
+            row_index_buffer[k] = row_index[i]
             i += 1
             k += 1
         }
         while j < end2 {
-            result_row_index_buffer[k] = row_index[j]
+            row_index_buffer[k] = row_index[j]
             j += 1
             k += 1
         }
@@ -112,39 +125,51 @@ struct SparseMatrix {
         } else {
             available_size = row_index.count - Int(col_start[Int(col1)])
         }
-        if k > available_size {
-            widenBuffer(row_index_buffer: &row_index_buffer)
+        if k - Int(col_start[Int(col1)]) > available_size {
+            throw NSError(domain: "SparseMatrix", code: 1, userInfo: ["message": "Not enough space"])
         }
-        row_index.replaceSubrange(Int(col_start[Int(col1)])..<Int(col_start[Int(col1)])+k, with: result_row_index_buffer[0..<k])
-        col_end[Int(col1)] = col_start[Int(col1)] + UInt32(k)
+
+        if copy {
+            let start = Int(col_start[Int(col1)])
+            row_index.replaceSubrange(start..<k, with: row_index_buffer[start..<k])
+        }
+        col_end[Int(col1)] = UInt32(k)
+    }
+
+    mutating func swapBuffers(row_index_buffer: inout [UInt32]) {
+        swap(&row_index, &row_index_buffer)
+    }
+
+    mutating func resizeBuffer(row_index_buffer: inout [UInt32]) {
+        let new_size: size_t = row_index.count * Int(widen_coef)
+        row_index_buffer += [UInt32](repeating: 0, count: new_size - row_index_buffer.count)
+        row_index += [UInt32](repeating: 0, count: row_index_buffer.count - row_index.count)
+    }
+
+    mutating func copyToBuffer(row_index_buffer: inout [UInt32], col: Int) {
+        let start = col_start[col]
+        let end = col_end[col]
+
+        let new_start = start * widen_coef
+        let new_end = new_start + (end - start)
+        row_index_buffer.replaceSubrange(Int(new_start)..<Int(new_end), with: row_index[Int(start)..<Int(end)])
+
+        col_start[col] = new_start
+        col_end[col] = new_end
     }
 
     mutating func widenBuffer(row_index_buffer: inout [UInt32]) {
-        var new_size: size_t = 0
-        for (start, end) in zip(col_start, col_end) {
-            new_size += Int(end - start)
-        }
-        new_size *= Int(widen_coef)
-
-        if new_size < row_index_buffer.count {
-            new_size = row_index_buffer.count
-        }
-        row_index_buffer += [UInt32](repeating: 0, count: new_size - row_index_buffer.count)
-
-        var cur_start = UInt32(new_size)
+        resizeBuffer(row_index_buffer: &row_index_buffer)
         for i in (0 ..< n).reversed() {
-            let start = col_start[i]
-            let end = col_end[i]
-
-            cur_start -= widen_coef * (end - start)
-            let cur_end = cur_start + (end - start)
-            row_index_buffer.replaceSubrange(Int(cur_start)..<Int(cur_end), with: row_index[Int(start)..<Int(end)])
-
-            col_start[i] = cur_start
-            col_end[i] = cur_end
+            copyToBuffer(row_index_buffer: &row_index_buffer, col: i)
         }
+        swapBuffers(row_index_buffer: &row_index_buffer)
+    }
 
-        swap(&row_index, &row_index_buffer)
+    mutating func copyColumnToBuffer(row_index_buffer: inout [UInt32], col: Int) {
+        let start = Int(col_start[col])
+        let end = Int(col_end[col])
+        row_index_buffer.replaceSubrange(start..<end, with: row_index[start..<end])
     }
 
     mutating func clearColumn(col_index: UInt32) {

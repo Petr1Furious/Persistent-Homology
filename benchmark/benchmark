@@ -4,17 +4,27 @@ from tempfile import NamedTemporaryFile
 import click
 import subprocess
 import time
+import re
+
+
+def select_types(types, regex):
+    if regex is None:
+        return types
+    return [t for t in types if re.match(regex, t)]
 
 
 @click.command()
-@click.option('--number', default=5, help='Number of times to run benchmark')
+@click.option('-n', '--number', default=5, help='Number of times to run benchmark')
+@click.option('-a', '--algorithm', default=None, help='Regex to select algorithms to run benchmark on')
 @click.argument('input_file', type=click.Path(exists=True))
 @click.argument('binary_path', type=click.Path(exists=True))
-def main(number: int, input_file: str, binary_path: str):
+def main(number: int, algorithm: str, input_file: str, binary_path: str):
     """Run persistent homology benchmark."""
     click.echo('Number of runs: %d' % number)
+    
+    algorithms = ['simple', 'twist', 'metal', 'sparse', 'sparse-twist', 'sparse-parallel', 'sparse-twist-parallel']
 
-    for mode in ['simple', 'twist', 'metal', 'sparse', 'sparse-twist', 'sparse-parallel', 'sparse-twist-parallel']:
+    for mode in select_types(algorithms, algorithm):
         total_time = 0.0
         failed = False
         with NamedTemporaryFile() as output_file:

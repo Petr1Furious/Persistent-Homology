@@ -36,7 +36,7 @@ func main() throws -> Void {
             }
         }
     } else if ["sparse", "sparse-twist", "sparse-parallel", "sparse-twist-parallel"].contains(mode) {
-        var matrix = SparseMatrix(widen_coef: 10)
+        var matrix = SparseMatrix(widen_coef: 2)
         do {
             try matrix.readFromFile(file_path: input_file_path)
         } catch {
@@ -44,9 +44,9 @@ func main() throws -> Void {
         }
 
         if mode == "sparse" || mode == "sparse-twist" {
-            low = reduceSparseMatrix(matrix: &matrix, twist: mode == "sparse-twist")
+            low = try reduceSparseMatrix(matrix: &matrix, twist: mode == "sparse-twist")
         } else {
-            low = reduceSparseParallel(matrix: &matrix, twist: mode == "sparse-twist-parallel")
+            low = try reduceSparseParallel(matrix: &matrix, twist: mode == "sparse-twist-parallel")
         }
     } else {
         print("Wrong mode")
