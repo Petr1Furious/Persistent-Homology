@@ -22,7 +22,7 @@ def main(number: int, algorithm: str, input_file: str, binary_path: str):
     """Run persistent homology benchmark."""
     click.echo('Number of runs: %d' % number)
     
-    algorithms = ['simple', 'twist', 'metal', 'sparse', 'sparse-twist', 'sparse-parallel', 'sparse-twist-parallel']
+    algorithms = ['sparse', 'sparse-twist', 'sparse-parallel', 'sparse-parallel-twist']
 
     for mode in select_types(algorithms, algorithm):
         total_time = 0.0
