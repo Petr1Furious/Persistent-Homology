@@ -4,12 +4,13 @@
 
 #include "IMatrix.hpp"
 #include "SparseMatrix.hpp"
+#include "ParallelSparseMatrix.hpp"
 
 #include <Metal/Metal.hpp>
 
-#include <iostream>
 #include <fstream>
 #include <chrono>
+#include <iostream>
 
 int main(int argc, const char * argv[]) {
     if (argc != 4) {
@@ -22,9 +23,10 @@ int main(int argc, const char * argv[]) {
     std::string outputFileName = argv[3];
 
     std::unique_ptr<IMatrix> matrix;
-    bool parallel_mode = mode == "sparse-parallel" || mode == "sparse-parallel-twist";
-    if (mode == "sparse" || mode == "sparse-twist" || parallel_mode) {
-        matrix = std::make_unique<SparseMatrix>(inputFileName, parallel_mode);
+    if (mode == "sparse" || mode == "sparse-twist") {
+        matrix = std::make_unique<SparseMatrix>(inputFileName);
+    } else if (mode == "sparse-parallel" || mode == "sparse-parallel-twist") {
+        matrix = std::make_unique<ParallelSparseMatrix>(inputFileName);
     } else {
         std::cout << "Unknown mode: " << mode << "\n";
         return 1;
