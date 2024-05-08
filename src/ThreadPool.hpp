@@ -9,25 +9,25 @@ class ThreadPool {
 public:
     ThreadPool(size_t num_threads = std::thread::hardware_concurrency()) {
         for (size_t i = 0; i < num_threads; i++) {
-            threads_.emplace_back([this] { 
-                while (true) { 
+            threads_.emplace_back([this] {
+                while (true) {
                     std::function<void()> task;
                     {
                         std::unique_lock<std::mutex> lock(
                             queue_mutex_);
 
-                        cv_.wait(lock, [this] { 
+                        cv_.wait(lock, [this] {
                             return !tasks_.empty() || stop_;
                         });
   
-                        if (stop_ && tasks_.empty()) { 
+                        if (stop_ && tasks_.empty()) {
                             return;
                         }
   
                         task = std::move(tasks_.front());
                         tasks_.pop();
                     }
-  
+
                     task();
                 }});
         }
