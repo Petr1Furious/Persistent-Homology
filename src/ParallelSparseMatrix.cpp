@@ -2,6 +2,7 @@
 #include <fstream>
 #include <sstream>
 #include <ctime>
+#include <chrono>
 
 #include "ParallelSparseMatrix.hpp"
 #include "ThreadPool.hpp"
@@ -51,24 +52,38 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
 
     std::vector<uint32_t> row_index_buffer(row_index_.size(), 0);
     std::vector<uint32_t> to_add(n_, n_);
-    std::vector<uint32_t> inverse_low(n_, n_);
+    std::vector<std::atomic<uint32_t>> inverse_low(n_);
+    for (auto& i : inverse_low) {
+        i.store(n_);
+    }
     while (true) {
-        inverse_low.assign(n_, n_);
-        bool is_over = true;
-        for (uint32_t i = 0; i < n_; i++) {
+        addTasksAndWait(pool, n_, [&](size_t i) {
             uint32_t cur_low = getLow(i);
-            if (cur_low == n_) {
-                continue;
+            if (cur_low != n_) {
+                while (true) {
+                    uint32_t cur_value = inverse_low[cur_low].load();
+                    if (i > cur_value) {
+                        break;
+                    }
+                    if (inverse_low[cur_low].compare_exchange_weak(cur_value, i)) {
+                        break;
+                    }
+                }
             }
-            uint32_t cur_inverse_low = inverse_low[cur_low];
+        });
 
-            if (cur_inverse_low == n_) {
-                inverse_low[cur_low] = i;
-            } else {
-                to_add[i] = cur_inverse_low;
+        addTasksAndWait(pool, n_, [&](size_t i) {
+            uint32_t cur_low = getLow(i);
+            if (cur_low != n_ && inverse_low[cur_low].load() != i) {
+                to_add[i] = inverse_low[cur_low].load();
             }
+        });
+
+        bool is_over = true;
+        for (size_t i = 0; i < n_; i++) {
             if (to_add[i] != n_) {
                 is_over = false;
+                break;
             }
         }
         if (is_over) {
@@ -76,7 +91,25 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
         }
 
         if (need_widen_buffer.load()) {
-            widenBuffer(row_index_buffer);
+            size_t new_size = row_index_.size() * widen_coef_;
+            row_index_buffer.resize(new_size, 0);
+            row_index_.resize(row_index_buffer.size(), 0);
+
+            addTasksAndWait(pool, n_, [&](size_t i) {
+                uint32_t start = col_start_[i];
+                uint32_t end = col_end_[i];
+                uint32_t new_start = start * widen_coef_;
+                uint32_t new_end = new_start + (end - start);
+
+                for (uint32_t j = 0; j < end - start; j++) {
+                    row_index_buffer[new_start + j] = row_index_[start + j];
+                }
+
+                col_start_[i] = new_start;
+                col_end_[i] = new_end;
+            });
+
+            std::swap(row_index_, row_index_buffer);
         }
         need_widen_buffer.store(false);
 
@@ -88,6 +121,8 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
                 }
                 to_add[i] = n_;
             }
+
+            inverse_low[i].store(n_);
         });
     }
 
