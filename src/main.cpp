@@ -5,6 +5,7 @@
 #include "IMatrix.hpp"
 #include "SparseMatrix.hpp"
 #include "ParallelSparseMatrix.hpp"
+#include "MetalSparseMatrix.hpp"
 
 #include <Metal/Metal.hpp>
 
@@ -14,7 +15,7 @@
 
 int main(int argc, const char * argv[]) {
     if (argc != 4) {
-        std::cout << "Usage: " << argv[0] << " <sparse/sparse-twist/sparse-parallel/sparse-parallel-twist> <input file name> <output file name>\n";
+        std::cout << "Usage: " << argv[0] << " <sparse/sparse-twist/sparse-parallel/sparse-parallel-twist/sparse-metal/sparse-metal-twist> <input file name> <output file name>\n";
         return 1;
     }
 
@@ -27,12 +28,14 @@ int main(int argc, const char * argv[]) {
         matrix = std::make_unique<SparseMatrix>(inputFileName);
     } else if (mode == "sparse-parallel" || mode == "sparse-parallel-twist") {
         matrix = std::make_unique<ParallelSparseMatrix>(inputFileName);
+    } else if (mode == "sparse-metal" || mode == "sparse-metal-twist") {
+        matrix = std::make_unique<MetalSparseMatrix>(inputFileName);
     } else {
         std::cout << "Unknown mode: " << mode << "\n";
         return 1;
     }
 
-    std::vector<uint32_t> result = matrix->reduce(mode == "sparse-twist" || mode == "sparse-parallel-twist");
+    std::vector<uint32_t> result = matrix->reduce(mode == "sparse-twist" || mode == "sparse-parallel-twist" || mode == "sparse-metal-twist");
     std::ofstream outputFile(outputFileName);
     for (size_t i = 0; i < result.size(); i++) {
         if (result[i] != matrix->size()) {
