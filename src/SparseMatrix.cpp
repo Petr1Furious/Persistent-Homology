@@ -1,6 +1,5 @@
 #include <fstream>
 #include <sstream>
-#include <iostream>
 
 #include "SparseMatrix.hpp"
 
@@ -18,7 +17,6 @@ std::vector<uint32_t> SparseMatrix::reduce(bool run_twist) {
     while (true) {
         bool is_over = true;
         inverse_low.assign(n_, n_);
-        auto start_time = std::chrono::high_resolution_clock::now();
         for (uint32_t i = 0; i < n_; i++) {
             uint32_t cur_low = getLow(i);
             if (cur_low == n_) {
@@ -44,7 +42,6 @@ std::vector<uint32_t> SparseMatrix::reduce(bool run_twist) {
         }
         need_widen_buffer = false;
 
-        std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start_time).count() << '\n';
         for (size_t i = 0; i < n_; i++) {
             if (to_add[i] != n_) {
                 addColumn(i, to_add[i], row_index_buffer);
@@ -54,7 +51,6 @@ std::vector<uint32_t> SparseMatrix::reduce(bool run_twist) {
                 to_add[i] = n_;
             }
         }
-        std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start_time).count() << "\n\n";
     }
 
     return getLowArray();

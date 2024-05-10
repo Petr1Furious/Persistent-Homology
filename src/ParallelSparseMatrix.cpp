@@ -2,7 +2,6 @@
 #include <fstream>
 #include <sstream>
 #include <ctime>
-#include <chrono>
 
 #include "ParallelSparseMatrix.hpp"
 #include "ThreadPool.hpp"

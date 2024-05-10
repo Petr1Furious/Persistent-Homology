@@ -23,9 +23,7 @@ private:
 
     void runTwist();
 
-    void sendComputeCommand();
-
-    void encodeComputeCommand(MTL::ComputeCommandEncoder*);
+    void sendComputeCommand(MTL::ComputePipelineState* ps, std::vector<MTL::Buffer*> buffers);
 
     bool enoughSizeForIteration(uint32_t col) const;
 
@@ -38,8 +36,11 @@ private:
     MTL::Buffer* row_index_buffer_;
     const uint32_t widen_coef_ = 2;
 
-    NS::AutoreleasePool* mPool;
-    MTL::Device* mDevice;
-    MTL::ComputePipelineState* mComputeFunctionPSO;
-    MTL::CommandQueue* mCommandQueue;
+    NS::AutoreleasePool* m_pool;
+    MTL::Device* m_device;
+    MTL::ComputePipelineState* count_inverse_low_ps;
+    MTL::ComputePipelineState* count_to_add_ps;
+    MTL::ComputePipelineState* add_columns_ps;
+    MTL::ComputePipelineState* copy_to_row_index_buffer_ps;
+    MTL::CommandQueue* m_command_queue;
 };

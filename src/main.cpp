@@ -35,7 +35,11 @@ int main(int argc, const char * argv[]) {
         return 1;
     }
 
+    std::cout << "Started " << mode << "\n";
+    auto start = std::chrono::high_resolution_clock::now();
     std::vector<uint32_t> result = matrix->reduce(mode == "sparse-twist" || mode == "sparse-parallel-twist" || mode == "sparse-metal-twist");
+    std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() << " ms\n";
+
     std::ofstream outputFile(outputFileName);
     for (size_t i = 0; i < result.size(); i++) {
         if (result[i] != matrix->size()) {

@@ -1,35 +1,61 @@
 #include <fstream>
 #include <sstream>
 
-#include <iostream>
-#include <chrono>
-
 #include "MetalSparseMatrix.hpp"
 
 MetalSparseMatrix::MetalSparseMatrix(const std::string& file_path) {
-    mPool = NS::AutoreleasePool::alloc()->init();
-    mDevice = MTL::CreateSystemDefaultDevice();
+    m_pool = NS::AutoreleasePool::alloc()->init();
+    m_device = MTL::CreateSystemDefaultDevice();
 
     NS::Error* error;
 
-    auto defaultLibrary = mDevice->newDefaultLibrary();
-    if (!defaultLibrary) {
+    auto default_library = m_device->newDefaultLibrary();
+    if (!default_library) {
         throw std::runtime_error("failed to find the default library");
     }
 
-    auto functionName = NS::String::string("add_columns", NS::ASCIIStringEncoding);
-    auto computeFunction = defaultLibrary->newFunction(functionName);
-    if(!computeFunction){
-        throw std::runtime_error("failed to find the compute function");
+    auto function_name = NS::String::string("count_inverse_low", NS::ASCIIStringEncoding);
+    auto count_inverse_low_function = default_library->newFunction(function_name);
+    if (!count_inverse_low_function) {
+        throw std::runtime_error("failed to find the count_inverse_low function");
+    }
+    count_inverse_low_ps = m_device->newComputePipelineState(count_inverse_low_function, &error);
+    if (!count_inverse_low_ps) {
+        throw std::runtime_error("failed to create the count_inverse_low pipeline state object");
     }
 
-    mComputeFunctionPSO = mDevice->newComputePipelineState(computeFunction, &error);
-    if (!computeFunction) {
-        throw std::runtime_error("failed to create the pipeline state object");
+    function_name = NS::String::string("count_to_add", NS::ASCIIStringEncoding);
+    auto count_to_add_function = default_library->newFunction(function_name);
+    if (!count_to_add_function) {
+        throw std::runtime_error("failed to find the count_to_add function");
+    }
+    count_to_add_ps = m_device->newComputePipelineState(count_to_add_function, &error);
+    if (!count_to_add_ps) {
+        throw std::runtime_error("failed to create the count_to_add pipeline state object");
+    }
+
+    function_name = NS::String::string("copy_to_row_index_buffer", NS::ASCIIStringEncoding);
+    auto copy_to_row_index_buffer_function = default_library->newFunction(function_name);
+    if (!copy_to_row_index_buffer_function) {
+        throw std::runtime_error("failed to find the copy_to_row_index_buffer function");
+    }
+    copy_to_row_index_buffer_ps = m_device->newComputePipelineState(copy_to_row_index_buffer_function, &error);
+    if (!copy_to_row_index_buffer_ps) {
+        throw std::runtime_error("failed to create the copy_to_row_index_buffer pipeline state object");
+    }
+
+    function_name = NS::String::string("add_columns", NS::ASCIIStringEncoding);
+    auto add_columns_function = default_library->newFunction(function_name);
+    if (!add_columns_function) {
+        throw std::runtime_error("failed to find the add_columns function");
+    }
+    add_columns_ps = m_device->newComputePipelineState(add_columns_function, &error);
+    if (!add_columns_ps) {
+        throw std::runtime_error("failed to create the add_columns pipeline state object");
     }
     
-    mCommandQueue = mDevice->newCommandQueue();
-    if (!mCommandQueue) {
+    m_command_queue = m_device->newCommandQueue();
+    if (!m_command_queue) {
         throw std::runtime_error("failed to find command queue");
     }
 
@@ -39,7 +65,7 @@ MetalSparseMatrix::MetalSparseMatrix(const std::string& file_path) {
 void MetalSparseMatrix::widenBuffer() {
     size_t new_size = row_index_size_ * widen_coef_;
 
-    auto new_buffer = mDevice->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto new_buffer = m_device->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
     auto new_buffer_ptr = (uint32_t*)new_buffer->contents();
 
     auto row_index_ptr = (uint32_t*)row_index_->contents();
@@ -64,7 +90,7 @@ void MetalSparseMatrix::widenBuffer() {
     if (row_index_buffer_) {
         row_index_buffer_->release();
     }
-    row_index_buffer_ = mDevice->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
 }
 
 size_t MetalSparseMatrix::size() const {
@@ -91,8 +117,8 @@ void MetalSparseMatrix::readFromFile(const std::string& file_path) {
         std::istringstream iss(line);
         if (i == 0) {
             iss >> n_;
-            col_start_ = mDevice->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
-            col_end_ = mDevice->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+            col_start_ = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+            col_end_ = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
         } else {
             uint32_t count = 0;
             uint32_t index;
@@ -114,41 +140,36 @@ void MetalSparseMatrix::readFromFile(const std::string& file_path) {
     }
 
     row_index_size_ = row_index.size();
-    row_index_ = mDevice->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    row_index_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
     auto row_index_ptr = (uint32_t*)row_index_->contents();
     for (size_t i = 0; i < row_index.size(); i++) {
         row_index_ptr[i] = row_index[i];
     }
-    row_index_buffer_ = mDevice->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
     widenBuffer();
 }
 
-void MetalSparseMatrix::sendAddColumnsCommand(MTL::Buffer* to_add, MTL::Buffer* n_buffer, MTL::Buffer* need_widen_buffer) {
-    MTL::CommandBuffer* commandBuffer = mCommandQueue->commandBuffer();
+void MetalSparseMatrix::sendComputeCommand(MTL::ComputePipelineState* ps, std::vector<MTL::Buffer*> buffers) {
+    MTL::CommandBuffer* commandBuffer = m_command_queue->commandBuffer();
     assert(commandBuffer != nullptr);
-    MTL::ComputeCommandEncoder* computeEncoder = commandBuffer->computeCommandEncoder();
-    assert(computeEncoder != nullptr);
+    MTL::ComputeCommandEncoder* compute_encoder = commandBuffer->computeCommandEncoder();
+    assert(compute_encoder != nullptr);
 
-    computeEncoder->setComputePipelineState(mComputeFunctionPSO);
-    computeEncoder->setBuffer(col_start_, 0, 0);
-    computeEncoder->setBuffer(col_end_, 0, 1);
-    computeEncoder->setBuffer(row_index_, 0, 2);
-    computeEncoder->setBuffer(row_index_buffer_, 0, 3);
-    computeEncoder->setBuffer(to_add, 0, 4);
-    computeEncoder->setBuffer(n_buffer, 0, 5);
-    computeEncoder->setBuffer(need_widen_buffer, 0, 6);
+    compute_encoder->setComputePipelineState(ps);
+    for (size_t i = 0; i < buffers.size(); i++) {
+        compute_encoder->setBuffer(buffers[i], 0, i);
+    }
 
     MTL::Size gridSize = MTL::Size(n_, 1, 1);
-
-    NS::UInteger threadGroupSize = mComputeFunctionPSO->maxTotalThreadsPerThreadgroup();
+    NS::UInteger threadGroupSize = add_columns_ps->maxTotalThreadsPerThreadgroup();
     if (threadGroupSize > n_) {
         threadGroupSize = n_;
     }
     MTL::Size threadgroupSize = MTL::Size(threadGroupSize, 1, 1);
 
-    computeEncoder->dispatchThreads(gridSize, threadgroupSize);
+    compute_encoder->dispatchThreads(gridSize, threadgroupSize);
 
-    computeEncoder->endEncoding();
+    compute_encoder->endEncoding();
     commandBuffer->commit();
     commandBuffer->waitUntilCompleted();
 }
@@ -180,60 +201,93 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
         runTwist();
     }
 
-    MTL::Buffer* need_widen_buffer = mDevice->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
-    uint32_t* need_widen_buffer_ptr = (uint32_t*)need_widen_buffer->contents();
+    MTL::Buffer* need_widen_buffer = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto* need_widen_buffer_ptr = (uint32_t*)need_widen_buffer->contents();
     *need_widen_buffer_ptr = 0;
 
-    MTL::Buffer* n_buffer = mDevice->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
-    uint32_t* n_ptr = (uint32_t*)n_buffer->contents();
+    MTL::Buffer* n_buffer = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto* n_ptr = (uint32_t*)n_buffer->contents();
     *n_ptr = n_;
 
-    MTL::Buffer* to_add = mDevice->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
-    uint32_t* to_add_ptr = (uint32_t*)to_add->contents();
+    MTL::Buffer* to_add = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+
+    MTL::Buffer* inverse_low = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto* inverse_low_ptr = (uint32_t*)inverse_low->contents();
     for (size_t i = 0; i < n_; i++) {
-        to_add_ptr[i] = n_;
+        inverse_low_ptr[i] = n_;
     }
+
+    MTL::Buffer* is_over = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto* is_over_ptr = (uint32_t*)is_over->contents();
+
+    MTL::Buffer* widen_coef_buffer_ = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto* widen_coef_buffer_ptr = (uint32_t*)widen_coef_buffer_->contents();
+    *widen_coef_buffer_ptr = widen_coef_;
 
     auto col_start_ptr = (uint32_t*)col_start_->contents();
     auto col_end_ptr = (uint32_t*)col_end_->contents();
     auto row_index_ptr = (uint32_t*)row_index_->contents();
 
-    std::vector<uint32_t> inverse_low(n_, n_);
     while (true) {
-        inverse_low.assign(n_, n_);
-        bool is_over = true;
-        auto start_time = std::chrono::high_resolution_clock::now();
-        for (uint32_t i = 0; i < n_; i++) {
-            uint32_t cur_low = (col_start_ptr[i] == col_end_ptr[i] ? n_ : row_index_ptr[col_end_ptr[i] - 1]);
-            if (cur_low == n_) {
-                continue;
-            }
-            uint32_t cur_inverse_low = inverse_low[cur_low];
+        std::vector<MTL::Buffer*> buffers = {
+            row_index_,
+            col_start_,
+            col_end_,
+            inverse_low,
+            n_buffer,
+        };
+        sendComputeCommand(count_inverse_low_ps, buffers);
 
-            if (cur_inverse_low == n_) {
-                inverse_low[cur_low] = i;
-            } else {
-                to_add_ptr[i] = cur_inverse_low;
-            }
-            if (to_add_ptr[i] != n_) {
-                is_over = false;
-            }
-        }
-        if (is_over) {
+        *is_over_ptr = 1;
+        buffers = {
+            row_index_,
+            col_start_,
+            col_end_,
+            inverse_low,
+            to_add,
+            n_buffer,
+            is_over,
+        };
+        sendComputeCommand(count_to_add_ps, buffers);
+
+        if (*is_over_ptr == 1) {
             break;
         }
 
         if (*need_widen_buffer_ptr == 1) {
-            widenBuffer();
-            col_start_ptr = (uint32_t*)col_start_->contents();
-            col_end_ptr = (uint32_t*)col_end_->contents();
+            size_t new_size = row_index_size_ * widen_coef_;
+
+            row_index_buffer_->release();
+            row_index_buffer_ = m_device->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+
+            buffers = {
+                row_index_,
+                col_start_,
+                col_end_,
+                widen_coef_buffer_,
+                row_index_buffer_,
+            };
+            sendComputeCommand(copy_to_row_index_buffer_ps, buffers);
+
+            row_index_size_ = new_size;
+            row_index_->release();
+            row_index_ = row_index_buffer_;
             row_index_ptr = (uint32_t*)row_index_->contents();
+
+            row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
         }
         *need_widen_buffer_ptr = 0;
 
-        std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start_time).count() << '\n';
-        sendAddColumnsCommand(to_add, n_buffer, need_widen_buffer);
-        std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start_time).count() << "\n\n";
+        buffers = {
+            col_start_,
+            col_end_,
+            row_index_,
+            row_index_buffer_,
+            to_add,
+            n_buffer,
+            need_widen_buffer,
+        };
+        sendComputeCommand(add_columns_ps, buffers);
     }
 
     to_add->release();
@@ -251,5 +305,5 @@ MetalSparseMatrix::~MetalSparseMatrix() {
     col_end_->release();
     row_index_->release();
     row_index_buffer_->release();
-    mPool->release();
+    m_pool->release();
 }

@@ -1,6 +1,70 @@
 #include <metal_stdlib>
 using namespace metal;
 
+kernel void count_inverse_low(device const uint32_t* row_index,
+                             device const uint32_t* col_start,
+                             device const uint32_t* col_end,
+                             device atomic_uint* inverse_low,
+                             device const uint32_t* n,
+                             uint i [[thread_position_in_grid]]) {
+    if (col_start[i] == col_end[i]) {
+        return;
+    }
+
+    uint32_t low = row_index[col_end[i] - 1];
+    while (true) {
+        uint32_t cur_value = atomic_load_explicit(inverse_low + low, memory_order_relaxed);
+        if (i > cur_value) {
+            break;
+        }
+        if (atomic_compare_exchange_weak_explicit(inverse_low + low, &cur_value, i, memory_order_relaxed, memory_order_relaxed)) {
+            break;
+        }
+    }
+}
+
+kernel void count_to_add(device const uint32_t* row_index,
+                         device const uint32_t* col_start,
+                         device const uint32_t* col_end,
+                         device const uint32_t* inverse_low,
+                         device uint32_t* to_add,
+                         device const uint32_t* n,
+                         device atomic_uint* is_over,
+                         uint i [[thread_position_in_grid]]) {
+    if (col_start[i] == col_end[i]) {
+        to_add[i] = *n;
+        return;
+    }
+
+    uint32_t low = row_index[col_end[i] - 1];
+    uint32_t low_inverse = inverse_low[low];
+    if (low_inverse == i) {
+        to_add[i] = *n;
+    } else {
+        to_add[i] = low_inverse;
+        atomic_store_explicit(is_over, 0, memory_order_relaxed);
+    }
+}
+
+kernel void copy_to_row_index_buffer(device const uint32_t* row_index,
+                                     device uint32_t* col_start,
+                                     device uint32_t* col_end,
+                                     device const uint32_t* widen_coef,
+                                     device uint32_t* row_index_buffer,
+                                     uint i [[thread_position_in_grid]]) {
+    uint32_t start = col_start[i];
+    uint32_t end = col_end[i];
+    uint32_t new_start = start * *widen_coef;
+    uint32_t new_end = new_start + (end - start);
+
+    for (uint32_t j = 0; j < end - start; j++) {
+        row_index_buffer[new_start + j] = row_index[start + j];
+    }
+
+    col_start[i] = new_start;
+    col_end[i] = new_end;
+}
+
 kernel void add_columns(device const uint32_t* col_start,
                         device uint32_t* col_end,
                         device uint32_t* row_index,
