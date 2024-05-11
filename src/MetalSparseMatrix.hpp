@@ -19,13 +19,7 @@ private:
 
     void readFromFile(const std::string& file_path);
 
-    void sendAddColumnsCommand(MTL::Buffer* to_add, MTL::Buffer* n_buffer, MTL::Buffer* need_widen_buffer);
-
-    void runTwist();
-
     void sendComputeCommand(MTL::ComputePipelineState* ps, std::vector<MTL::Buffer*> buffers);
-
-    bool enoughSizeForIteration(uint32_t col) const;
 
     size_t n_;
     MTL::Buffer* col_start_;
@@ -35,9 +29,11 @@ private:
     MTL::Buffer* row_index_;
     MTL::Buffer* row_index_buffer_;
     const uint32_t widen_coef_ = 2;
+    MTL::Buffer* widen_coef_buffer_;
 
     NS::AutoreleasePool* m_pool;
     MTL::Device* m_device;
+    MTL::ComputePipelineState* run_twist_ps;
     MTL::ComputePipelineState* count_inverse_low_ps;
     MTL::ComputePipelineState* count_to_add_ps;
     MTL::ComputePipelineState* add_columns_ps;

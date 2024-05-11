@@ -91,6 +91,10 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
 
         if (need_widen_buffer.load()) {
             size_t new_size = row_index_.size() * widen_coef_;
+            if (new_size >= (1ll << 32)) {
+                throw std::runtime_error("Out of memory");
+            }
+
             row_index_buffer.resize(new_size, 0);
             row_index_.resize(row_index_buffer.size(), 0);
 

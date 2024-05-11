@@ -1,6 +1,18 @@
 #include <metal_stdlib>
 using namespace metal;
 
+kernel void run_twist(device const uint32_t* row_index,
+                      device uint32_t* col_end,
+                      device const uint32_t* col_start,
+                      uint i [[thread_position_in_grid]]) {
+    if (col_start[i] == col_end[i]) {
+        return;
+    }
+
+    uint32_t low = row_index[col_end[i] - 1];
+    col_end[low] = col_start[low];
+}
+
 kernel void count_inverse_low(device const uint32_t* row_index,
                              device const uint32_t* col_start,
                              device const uint32_t* col_end,
@@ -49,8 +61,8 @@ kernel void count_to_add(device const uint32_t* row_index,
 kernel void copy_to_row_index_buffer(device const uint32_t* row_index,
                                      device uint32_t* col_start,
                                      device uint32_t* col_end,
-                                     device const uint32_t* widen_coef,
                                      device uint32_t* row_index_buffer,
+                                     device const uint32_t* widen_coef,
                                      uint i [[thread_position_in_grid]]) {
     uint32_t start = col_start[i];
     uint32_t end = col_end[i];
@@ -71,6 +83,7 @@ kernel void add_columns(device const uint32_t* col_start,
                         device uint32_t* row_index_buffer,
                         device uint32_t* to_add,
                         device const uint32_t* n,
+                        device const uint32_t* row_index_size,
                         device atomic_uint* need_widen_buffer,
                         uint add_to [[thread_position_in_grid]]) {
     if (to_add[add_to] == *n) {
@@ -122,7 +135,7 @@ kernel void add_columns(device const uint32_t* col_start,
     if (add_to + 1 != *n) {
         available = col_start[add_to + 1] - col_start[add_to];
     } else {
-        available = *n - col_start[add_to];
+        available = *row_index_size - col_start[add_to];
     }
 
     if (len * 2 > available) {

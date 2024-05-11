@@ -15,6 +15,16 @@ MetalSparseMatrix::MetalSparseMatrix(const std::string& file_path) {
     }
 
     auto function_name = NS::String::string("count_inverse_low", NS::ASCIIStringEncoding);
+    auto run_twist_function = default_library->newFunction(function_name);
+    if (!run_twist_function) {
+        throw std::runtime_error("failed to find the run_twist function");
+    }
+    run_twist_ps = m_device->newComputePipelineState(run_twist_function, &error);
+    if (!run_twist_ps) {
+        throw std::runtime_error("failed to create the run_twist pipeline state object");
+    }
+
+    function_name = NS::String::string("count_inverse_low", NS::ASCIIStringEncoding);
     auto count_inverse_low_function = default_library->newFunction(function_name);
     if (!count_inverse_low_function) {
         throw std::runtime_error("failed to find the count_inverse_low function");
@@ -62,39 +72,33 @@ MetalSparseMatrix::MetalSparseMatrix(const std::string& file_path) {
     readFromFile(file_path);
 }
 
+size_t MetalSparseMatrix::size() const {
+    return n_;
+}
+
 void MetalSparseMatrix::widenBuffer() {
     size_t new_size = row_index_size_ * widen_coef_;
-
-    auto new_buffer = m_device->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
-    auto new_buffer_ptr = (uint32_t*)new_buffer->contents();
-
-    auto row_index_ptr = (uint32_t*)row_index_->contents();
-    auto col_start_ptr = (uint32_t*)col_start_->contents();
-    auto col_end_ptr = (uint32_t*)col_end_->contents();
-    for (size_t i = 0; i < n_; i++) {
-        uint32_t start = col_start_ptr[i];
-        uint32_t end = col_end_ptr[i];
-
-        uint32_t new_start = start * widen_coef_;
-        uint32_t new_end = new_start + (end - start);
-        std::memcpy(new_buffer_ptr + new_start, row_index_ptr + start, (end - start) * sizeof(uint32_t));
-
-        col_start_ptr[i] = new_start;
-        col_end_ptr[i] = new_end;
+    if (new_size * sizeof(uint32_t) >= (1ll << 32)) {
+        throw std::runtime_error("Out of memory");
     }
+
+    row_index_buffer_->release();
+    row_index_buffer_ = m_device->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+
+    std::vector<MTL::Buffer*> buffers = {
+        row_index_,
+        col_start_,
+        col_end_,
+        row_index_buffer_,
+        widen_coef_buffer_,
+    };
+    sendComputeCommand(copy_to_row_index_buffer_ps, buffers);
 
     row_index_size_ = new_size;
     row_index_->release();
-    row_index_ = new_buffer;
+    row_index_ = row_index_buffer_;
 
-    if (row_index_buffer_) {
-        row_index_buffer_->release();
-    }
     row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
-}
-
-size_t MetalSparseMatrix::size() const {
-    return n_;
 }
 
 void MetalSparseMatrix::readFromFile(const std::string& file_path) {
@@ -106,6 +110,9 @@ void MetalSparseMatrix::readFromFile(const std::string& file_path) {
     std::string line;
     size_t i = 0;
     std::vector<uint32_t> row_index;
+    
+    uint32_t* col_start_ptr;
+    uint32_t* col_end_ptr;
     while (std::getline(file, line)) {
         if (i > n_) {
             if (!line.empty()) {
@@ -119,6 +126,9 @@ void MetalSparseMatrix::readFromFile(const std::string& file_path) {
             iss >> n_;
             col_start_ = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
             col_end_ = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+
+            col_start_ptr = (uint32_t*)col_start_->contents();
+            col_end_ptr = (uint32_t*)col_end_->contents();
         } else {
             uint32_t count = 0;
             uint32_t index;
@@ -127,8 +137,6 @@ void MetalSparseMatrix::readFromFile(const std::string& file_path) {
                 row_index.push_back(index);
             }
 
-            auto col_start_ptr = (uint32_t*)col_start_->contents();
-            auto col_end_ptr = (uint32_t*)col_end_->contents();
             if (i < n_) {
                 col_start_ptr[i] = col_start_ptr[i - 1] + count;
                 col_end_ptr[i - 1] = col_start_ptr[i];
@@ -146,6 +154,11 @@ void MetalSparseMatrix::readFromFile(const std::string& file_path) {
         row_index_ptr[i] = row_index[i];
     }
     row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+
+    widen_coef_buffer_ = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto* widen_coef_buffer_ptr = (uint32_t*)widen_coef_buffer_->contents();
+    *widen_coef_buffer_ptr = widen_coef_;
+
     widenBuffer();
 }
 
@@ -174,31 +187,14 @@ void MetalSparseMatrix::sendComputeCommand(MTL::ComputePipelineState* ps, std::v
     commandBuffer->waitUntilCompleted();
 }
 
-void MetalSparseMatrix::runTwist() {
-    auto col_start_ptr = (uint32_t*)col_start_->contents();
-    auto col_end_ptr = (uint32_t*)col_end_->contents();
-    auto row_index_ptr = (uint32_t*)row_index_->contents();
-    for (uint32_t i = 0; i < n_; i++) {
-        uint32_t curLow = (col_start_ptr[i] == col_end_ptr[i] ? n_ : row_index_ptr[col_end_ptr[i] - 1]);
-        if (curLow != n_) {
-            col_end_ptr[curLow] = col_start_ptr[curLow];
-        }
-    }
-}
-
-bool MetalSparseMatrix::enoughSizeForIteration(uint32_t col) const {
-    auto col_start_ptr = (uint32_t*)col_start_->contents();
-    auto col_end_ptr = (uint32_t*)col_end_->contents();
-
-    uint32_t col_size = col_end_ptr[col] - col_start_ptr[col];
-    uint32_t available_size = (col + 1 < n_) ? col_start_ptr[col + 1] - col_start_ptr[col] :
-        static_cast<uint32_t>(row_index_size_) - col_start_ptr[col];
-    return col_size * 2 <= available_size;
-}
-
 std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
     if (run_twist) {
-        runTwist();
+        std::vector<MTL::Buffer*> buffers = {
+            col_start_,
+            col_end_,
+            row_index_,
+        };
+        sendComputeCommand(run_twist_ps, buffers);
     }
 
     MTL::Buffer* need_widen_buffer = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
@@ -220,9 +216,9 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
     MTL::Buffer* is_over = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
     auto* is_over_ptr = (uint32_t*)is_over->contents();
 
-    MTL::Buffer* widen_coef_buffer_ = m_device->newBuffer(sizeof(uint32_t), MTL::ResourceStorageModeShared);
-    auto* widen_coef_buffer_ptr = (uint32_t*)widen_coef_buffer_->contents();
-    *widen_coef_buffer_ptr = widen_coef_;
+    MTL::Buffer* row_index_size_buffer = m_device->newBuffer(sizeof(uint64_t), MTL::ResourceStorageModeShared);
+    auto* row_index_size_ptr = (uint64_t*)row_index_size_buffer->contents();
+    *row_index_size_ptr = row_index_size_;
 
     auto col_start_ptr = (uint32_t*)col_start_->contents();
     auto col_end_ptr = (uint32_t*)col_end_->contents();
@@ -255,28 +251,10 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
         }
 
         if (*need_widen_buffer_ptr == 1) {
-            size_t new_size = row_index_size_ * widen_coef_;
-
-            row_index_buffer_->release();
-            row_index_buffer_ = m_device->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
-
-            buffers = {
-                row_index_,
-                col_start_,
-                col_end_,
-                widen_coef_buffer_,
-                row_index_buffer_,
-            };
-            sendComputeCommand(copy_to_row_index_buffer_ps, buffers);
-
-            row_index_size_ = new_size;
-            row_index_->release();
-            row_index_ = row_index_buffer_;
+            widenBuffer();
             row_index_ptr = (uint32_t*)row_index_->contents();
-
-            row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+            *need_widen_buffer_ptr = 0;
         }
-        *need_widen_buffer_ptr = 0;
 
         buffers = {
             col_start_,
@@ -285,6 +263,7 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
             row_index_buffer_,
             to_add,
             n_buffer,
+            row_index_size_buffer,
             need_widen_buffer,
         };
         sendComputeCommand(add_columns_ps, buffers);
@@ -292,6 +271,10 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
 
     to_add->release();
     n_buffer->release();
+    inverse_low->release();
+    is_over->release();
+    row_index_size_buffer->release();
+    need_widen_buffer->release();
 
     std::vector<uint32_t> lowArray(n_);
     for (size_t i = 0; i < n_; i++) {
@@ -305,5 +288,6 @@ MetalSparseMatrix::~MetalSparseMatrix() {
     col_end_->release();
     row_index_->release();
     row_index_buffer_->release();
+    widen_coef_buffer_->release();
     m_pool->release();
 }

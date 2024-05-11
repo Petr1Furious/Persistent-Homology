@@ -116,6 +116,10 @@ void SparseMatrixBase::addColumn(uint32_t add_to, uint32_t add_from, std::vector
 
 void SparseMatrixBase::widenBuffer(std::vector<uint32_t>& row_index_buffer) {
     size_t new_size = row_index_.size() * widen_coef_;
+    if (new_size >= (1ll << 32)) {
+        throw std::runtime_error("Out of memory");
+    }
+
     row_index_buffer.resize(new_size, 0);
     row_index_.resize(row_index_buffer.size(), 0);
 

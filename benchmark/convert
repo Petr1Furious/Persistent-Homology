@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+
+import sys
+
+
+input_filepath = sys.argv[1]
+output_filepath = sys.argv[2]
+input_file = open(input_filepath, 'r')
+output_file = open(output_filepath, 'w')
+
+first_line = True
+for line in input_file.read().split('\n'):
+    if first_line:
+        output_file.write(line.split(' ')[0] + '\n')
+        first_line = False
+    else:
+        output_file.write(' '.join(line.split(' ')[1:]) + '\n')

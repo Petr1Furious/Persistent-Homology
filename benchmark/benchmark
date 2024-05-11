@@ -5,6 +5,7 @@ import click
 import subprocess
 import time
 import re
+import hashlib
 
 
 def select_types(types, regex):
@@ -16,29 +17,40 @@ def select_types(types, regex):
 @click.command()
 @click.option('-n', '--number', default=5, help='Number of times to run benchmark')
 @click.option('-a', '--algorithm', default=None, help='Regex to select algorithms to run benchmark on')
-@click.argument('input_file', type=click.Path(exists=True))
+@click.option('-s', '--stdout_time', default=None, is_flag=True, help='Print time from binary stdout')
 @click.argument('binary_path', type=click.Path(exists=True))
-def main(number: int, algorithm: str, input_file: str, binary_path: str):
+@click.argument('input_file', type=click.Path(exists=True))
+def main(number: int, algorithm: str, input_file: str, binary_path: str, stdout_time: bool):
     """Run persistent homology benchmark."""
     click.echo('Number of runs: %d' % number)
     
-    algorithms = ['sparse', 'sparse-twist', 'sparse-parallel', 'sparse-parallel-twist']
+    algorithms = ['sparse', 'sparse-twist', 'sparse-parallel', 'sparse-parallel-twist', 'sparse-metal', 'sparse-metal-twist']
 
-    for mode in select_types(algorithms, algorithm):
+    first_hash = None
+    selected_algorithms = select_types(algorithms, algorithm)
+    for mode in selected_algorithms:
         total_time = 0.0
         failed = False
-        with NamedTemporaryFile() as output_file:
-            for i in range(number):
+        for i in range(number):
+            with NamedTemporaryFile() as output_file:
                 click.echo('Running %s benchmark %d' % (mode, i))
                 start_time = time.time()
-                result = subprocess.run([binary_path, mode, input_file, output_file.name])
-                elapsed_time = time.time() - start_time
+                result = subprocess.run([binary_path, mode, input_file, output_file.name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                elapsed_time = time.time() - start_time if not stdout_time else float(result.stdout.decode().strip())
                 total_time += elapsed_time
 
                 if result.returncode != 0:
                     click.echo('Benchmark for mode %s failed' % mode)
                     failed = True
                     break
+                
+                if first_hash is None:
+                    first_hash = hashlib.md5(output_file.read()).hexdigest()
+                else:
+                    if first_hash != hashlib.md5(output_file.read()).hexdigest():
+                        click.echo(f'Output files are different for modes {mode} and {selected_algorithms[0]}')
+                        failed = True
+                        break
         
         if failed:
             continue
