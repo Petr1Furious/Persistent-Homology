@@ -14,22 +14,25 @@ kernel void run_twist(device const uint32_t* row_index,
 }
 
 kernel void count_inverse_low(device const uint32_t* row_index,
-                             device const uint32_t* col_start,
-                             device const uint32_t* col_end,
-                             device atomic_uint* inverse_low,
-                             device const uint32_t* n,
-                             uint i [[thread_position_in_grid]]) {
+                              device const uint32_t* col_start,
+                              device const uint32_t* col_end,
+                              device atomic_uint* inverse_low,
+                              device const uint32_t* n,
+                              uint i [[thread_position_in_grid]]) {
     if (col_start[i] == col_end[i]) {
         return;
     }
 
     uint32_t low = row_index[col_end[i] - 1];
     while (true) {
-        uint32_t cur_value = atomic_load_explicit(inverse_low + low, memory_order_relaxed);
+        uint32_t cur_value =
+            atomic_load_explicit(inverse_low + low, memory_order_relaxed);
         if (i > cur_value) {
             break;
         }
-        if (atomic_compare_exchange_weak_explicit(inverse_low + low, &cur_value, i, memory_order_relaxed, memory_order_relaxed)) {
+        if (atomic_compare_exchange_weak_explicit(inverse_low + low, &cur_value,
+                                                  i, memory_order_relaxed,
+                                                  memory_order_relaxed)) {
             break;
         }
     }
@@ -39,8 +42,7 @@ kernel void count_to_add(device const uint32_t* row_index,
                          device const uint32_t* col_start,
                          device const uint32_t* col_end,
                          device const uint32_t* inverse_low,
-                         device uint32_t* to_add,
-                         device const uint32_t* n,
+                         device uint32_t* to_add, device const uint32_t* n,
                          device atomic_uint* is_over,
                          uint i [[thread_position_in_grid]]) {
     if (col_start[i] == col_end[i]) {
@@ -59,11 +61,11 @@ kernel void count_to_add(device const uint32_t* row_index,
 }
 
 kernel void copy_to_new_start(device const uint32_t* row_index,
-                                     device uint32_t* col_start,
-                                     device uint32_t* col_end,
-                                     device uint32_t* row_index_buffer,
-                                     device uint32_t* new_col_start,
-                                     uint i [[thread_position_in_grid]]) {
+                              device uint32_t* col_start,
+                              device uint32_t* col_end,
+                              device uint32_t* row_index_buffer,
+                              device uint32_t* new_col_start,
+                              uint i [[thread_position_in_grid]]) {
     uint32_t start = col_start[i];
     uint32_t end = col_end[i];
     uint32_t new_start = new_col_start[i];
@@ -77,11 +79,9 @@ kernel void copy_to_new_start(device const uint32_t* row_index,
 }
 
 kernel void add_columns(device const uint32_t* col_start,
-                        device uint32_t* col_end,
-                        device uint32_t* row_index,
+                        device uint32_t* col_end, device uint32_t* row_index,
                         device uint32_t* row_index_buffer,
-                        device uint32_t* to_add,
-                        device const uint32_t* n,
+                        device uint32_t* to_add, device const uint32_t* n,
                         device const uint32_t* row_index_size,
                         device atomic_uint* need_widen_buffer,
                         uint add_to [[thread_position_in_grid]]) {

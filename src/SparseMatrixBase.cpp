@@ -1,16 +1,14 @@
-#include <fstream>
-#include <sstream>
-#include <iostream>
-
 #include "SparseMatrixBase.hpp"
+
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 SparseMatrixBase::SparseMatrixBase(const std::string& file_path) {
     readFromFile(file_path);
 }
 
-size_t SparseMatrixBase::size() const {
-    return n_;
-}
+size_t SparseMatrixBase::size() const { return n_; }
 
 void SparseMatrixBase::readFromFile(const std::string& file_path) {
     std::ifstream file(file_path);
@@ -56,17 +54,22 @@ void SparseMatrixBase::readFromFile(const std::string& file_path) {
 }
 
 uint32_t SparseMatrixBase::getLow(uint32_t col_index) const {
-    return col_start_[col_index] == col_end_[col_index] ? n_ : row_index_[col_end_[col_index] - 1];
+    return col_start_[col_index] == col_end_[col_index]
+               ? n_
+               : row_index_[col_end_[col_index] - 1];
 }
 
 bool SparseMatrixBase::enoughSizeForIteration(uint32_t col) const {
     uint32_t col_size = col_end_[col] - col_start_[col];
-    uint32_t available_size = (col + 1 < n_) ? col_start_[col + 1] - col_start_[col] :
-        static_cast<uint32_t>(row_index_.size()) - col_start_[col];
+    uint32_t available_size =
+        (col + 1 < n_)
+            ? col_start_[col + 1] - col_start_[col]
+            : static_cast<uint32_t>(row_index_.size()) - col_start_[col];
     return col_size * 2 <= available_size;
 }
 
-void SparseMatrixBase::addColumn(uint32_t add_to, uint32_t add_from, std::vector<uint32_t>& row_index_buffer) {
+void SparseMatrixBase::addColumn(uint32_t add_to, uint32_t add_from,
+                                 std::vector<uint32_t>& row_index_buffer) {
     uint32_t end1 = col_end_[add_to];
     uint32_t end2 = col_end_[add_from];
 
@@ -124,7 +127,9 @@ void SparseMatrixBase::widenBuffer(std::vector<uint32_t>& row_index_buffer) {
         uint32_t len = col_end_[i] - col_start_[i];
         cur_col_start += widen_coef_ * len;
         if (len != 0) {
-            cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_.size() : col_start_[i + 1]) - col_end_[i];
+            cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_.size()
+                                          : col_start_[i + 1]) -
+                             col_end_[i];
         }
     }
 
@@ -137,7 +142,8 @@ void SparseMatrixBase::widenBuffer(std::vector<uint32_t>& row_index_buffer) {
         int end = col_end_[i];
         int new_start = new_col_start[i];
 
-        std::copy(row_index_.begin() + start, row_index_.begin() + end, row_index_buffer.begin() + new_start);
+        std::copy(row_index_.begin() + start, row_index_.begin() + end,
+                  row_index_buffer.begin() + new_start);
 
         col_start_[i] = new_start;
         col_end_[i] = new_start + (end - start);

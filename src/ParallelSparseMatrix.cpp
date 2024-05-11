@@ -1,12 +1,14 @@
+#include "ParallelSparseMatrix.hpp"
+
 #include <atomic>
+#include <ctime>
 #include <fstream>
 #include <sstream>
-#include <ctime>
 
-#include "ParallelSparseMatrix.hpp"
 #include "ThreadPool.hpp"
 
-void addTasksAndWait(ThreadPool& pool, size_t n_, std::function<void(size_t)> task) {
+void addTasksAndWait(ThreadPool& pool, size_t n_,
+                     std::function<void(size_t)> task) {
     const size_t batch_size = 10000;
     size_t batch_count = (n_ + batch_size - 1) / batch_size;
 
@@ -15,31 +17,31 @@ void addTasksAndWait(ThreadPool& pool, size_t n_, std::function<void(size_t)> ta
     std::mutex mutex;
 
     for (size_t batch_num = 0; batch_num < batch_count; batch_num++) {
-        pool.enqueue([&cv, &tasks_completed, &mutex, batch_count, batch_num, n_, task] {
-            size_t start = batch_num * batch_size;
-            size_t end = std::min(start + batch_size, n_);
-            for (size_t i = start; i < end; i++) {
-                task(i);
-            }
-
-            {
-                std::unique_lock<std::mutex> lock(mutex);
-                if (++tasks_completed == batch_count) {
-                    cv.notify_one();
+        pool.enqueue(
+            [&cv, &tasks_completed, &mutex, batch_count, batch_num, n_, task] {
+                size_t start = batch_num * batch_size;
+                size_t end = std::min(start + batch_size, n_);
+                for (size_t i = start; i < end; i++) {
+                    task(i);
                 }
-            }
-        });
+
+                {
+                    std::unique_lock<std::mutex> lock(mutex);
+                    if (++tasks_completed == batch_count) {
+                        cv.notify_one();
+                    }
+                }
+            });
     }
 
     {
         std::unique_lock<std::mutex> lock(mutex);
-        cv.wait(lock, [&] {
-            return tasks_completed == batch_count;
-        });
+        cv.wait(lock, [&] { return tasks_completed == batch_count; });
     }
 }
 
-ParallelSparseMatrix::ParallelSparseMatrix(const std::string& file_path) : SparseMatrixBase(file_path) {}
+ParallelSparseMatrix::ParallelSparseMatrix(const std::string& file_path)
+    : SparseMatrixBase(file_path) {}
 
 std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
     if (run_twist) {
@@ -64,7 +66,8 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
                     if (i > cur_value) {
                         break;
                     }
-                    if (inverse_low[cur_low].compare_exchange_weak(cur_value, i)) {
+                    if (inverse_low[cur_low].compare_exchange_weak(cur_value,
+                                                                   i)) {
                         break;
                     }
                 }
@@ -99,7 +102,9 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
                 uint32_t len = col_end_[i] - col_start_[i];
                 cur_col_start += widen_coef_ * len;
                 if (len != 0) {
-                    cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_.size() : col_start_[i + 1]) - col_end_[i];
+                    cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_.size()
+                                                  : col_start_[i + 1]) -
+                                     col_end_[i];
                 }
             }
 
@@ -112,7 +117,8 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
                 int end = col_end_[i];
                 int new_start = new_col_start[i];
 
-                std::copy(row_index_.begin() + start, row_index_.begin() + end, row_index_buffer.begin() + new_start);
+                std::copy(row_index_.begin() + start, row_index_.begin() + end,
+                          row_index_buffer.begin() + new_start);
 
                 col_start_[i] = new_start;
                 col_end_[i] = new_start + (end - start);

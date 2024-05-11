@@ -2,20 +2,22 @@
 #define CA_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
 
-#include "IMatrix.hpp"
-#include "SparseMatrix.hpp"
-#include "ParallelSparseMatrix.hpp"
-#include "MetalSparseMatrix.hpp"
-
 #include <Metal/Metal.hpp>
-
-#include <fstream>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 
-int main(int argc, const char * argv[]) {
+#include "IMatrix.hpp"
+#include "MetalSparseMatrix.hpp"
+#include "ParallelSparseMatrix.hpp"
+#include "SparseMatrix.hpp"
+
+int main(int argc, const char* argv[]) {
     if (argc != 4) {
-        std::cout << "Usage: " << argv[0] << " <sparse/sparse-twist/sparse-parallel/sparse-parallel-twist/sparse-metal/sparse-metal-twist> <input file name> <output file name>\n";
+        std::cout << "Usage: " << argv[0]
+                  << " <sparse/sparse-twist/sparse-parallel/"
+                     "sparse-parallel-twist/sparse-metal/sparse-metal-twist> "
+                     "<input file name> <output file name>\n";
         return 1;
     }
 
@@ -36,8 +38,14 @@ int main(int argc, const char * argv[]) {
     }
 
     auto start = std::chrono::high_resolution_clock::now();
-    std::vector<uint32_t> result = matrix->reduce(mode == "sparse-twist" || mode == "sparse-parallel-twist" || mode == "sparse-metal-twist");
-    std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() / 1'000'000.0 << "\n";
+    std::vector<uint32_t> result = matrix->reduce(
+        mode == "sparse-twist" || mode == "sparse-parallel-twist" ||
+        mode == "sparse-metal-twist");
+    std::cout << std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::high_resolution_clock::now() - start)
+                         .count() /
+                     1'000'000.0
+              << "\n";
 
     std::vector<std::pair<uint32_t, uint32_t>> result_pairs;
     for (size_t i = 0; i < result.size(); i++) {

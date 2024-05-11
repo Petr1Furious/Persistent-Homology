@@ -1,9 +1,10 @@
+#include "SparseMatrix.hpp"
+
 #include <fstream>
 #include <sstream>
 
-#include "SparseMatrix.hpp"
-
-SparseMatrix::SparseMatrix(const std::string& file_path) : SparseMatrixBase(file_path) {}
+SparseMatrix::SparseMatrix(const std::string& file_path)
+    : SparseMatrixBase(file_path) {}
 
 std::vector<uint32_t> SparseMatrix::reduce(bool run_twist) {
     if (run_twist) {
