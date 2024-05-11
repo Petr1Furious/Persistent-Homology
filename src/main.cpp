@@ -39,11 +39,17 @@ int main(int argc, const char * argv[]) {
     std::vector<uint32_t> result = matrix->reduce(mode == "sparse-twist" || mode == "sparse-parallel-twist" || mode == "sparse-metal-twist");
     std::cout << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start).count() / 1'000'000.0 << "\n";
 
-    std::ofstream outputFile(outputFileName);
+    std::vector<std::pair<uint32_t, uint32_t>> result_pairs;
     for (size_t i = 0; i < result.size(); i++) {
         if (result[i] != matrix->size()) {
-            outputFile << i << ' ' << result[i] << '\n';
+            result_pairs.emplace_back(result[i], i);
         }
+    }
+    std::sort(result_pairs.begin(), result_pairs.end());
+
+    std::ofstream outputFile(outputFileName);
+    for (const auto& [birth, death] : result_pairs) {
+        outputFile << birth << " " << death << "\n";
     }
     return 0;
 }

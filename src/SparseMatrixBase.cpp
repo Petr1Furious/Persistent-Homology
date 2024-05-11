@@ -115,26 +115,35 @@ void SparseMatrixBase::addColumn(uint32_t add_to, uint32_t add_from, std::vector
 }
 
 void SparseMatrixBase::widenBuffer(std::vector<uint32_t>& row_index_buffer) {
-    size_t new_size = row_index_.size() * widen_coef_;
-    if (new_size >= (1ll << 32)) {
-        throw std::runtime_error("Out of memory");
+    std::vector<uint32_t> new_col_start(n_);
+
+    uint32_t cur_col_start = 0;
+    for (size_t i = 0; i < n_; i++) {
+        new_col_start[i] = cur_col_start;
+
+        uint32_t len = col_end_[i] - col_start_[i];
+        cur_col_start += widen_coef_ * len;
+        if (len != 0) {
+            cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_.size() : col_start_[i + 1]) - col_end_[i];
+        }
     }
 
-    row_index_buffer.resize(new_size, 0);
-    row_index_.resize(row_index_buffer.size(), 0);
+    uint32_t new_size = cur_col_start;
 
-    for (int i = n_ - 1; i >= 0; i--) {
+    row_index_buffer.resize(new_size, 0);
+
+    for (size_t i = 0; i < n_; i++) {
         int start = col_start_[i];
         int end = col_end_[i];
+        int new_start = new_col_start[i];
 
-        int new_start = start * widen_coef_;
-        int new_end = new_start + (end - start);
         std::copy(row_index_.begin() + start, row_index_.begin() + end, row_index_buffer.begin() + new_start);
 
         col_start_[i] = new_start;
-        col_end_[i] = new_end;
+        col_end_[i] = new_start + (end - start);
     }
 
+    row_index_.resize(new_size, 0);
     std::swap(row_index_, row_index_buffer);
 }
 

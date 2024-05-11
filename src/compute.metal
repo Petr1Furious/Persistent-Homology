@@ -58,23 +58,22 @@ kernel void count_to_add(device const uint32_t* row_index,
     }
 }
 
-kernel void copy_to_row_index_buffer(device const uint32_t* row_index,
+kernel void copy_to_new_start(device const uint32_t* row_index,
                                      device uint32_t* col_start,
                                      device uint32_t* col_end,
                                      device uint32_t* row_index_buffer,
-                                     device const uint32_t* widen_coef,
+                                     device uint32_t* new_col_start,
                                      uint i [[thread_position_in_grid]]) {
     uint32_t start = col_start[i];
     uint32_t end = col_end[i];
-    uint32_t new_start = start * *widen_coef;
-    uint32_t new_end = new_start + (end - start);
+    uint32_t new_start = new_col_start[i];
 
     for (uint32_t j = 0; j < end - start; j++) {
         row_index_buffer[new_start + j] = row_index[start + j];
     }
 
     col_start[i] = new_start;
-    col_end[i] = new_end;
+    col_end[i] = new_start + (end - start);
 }
 
 kernel void add_columns(device const uint32_t* col_start,

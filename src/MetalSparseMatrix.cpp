@@ -44,14 +44,14 @@ MetalSparseMatrix::MetalSparseMatrix(const std::string& file_path) {
         throw std::runtime_error("failed to create the count_to_add pipeline state object");
     }
 
-    function_name = NS::String::string("copy_to_row_index_buffer", NS::ASCIIStringEncoding);
-    auto copy_to_row_index_buffer_function = default_library->newFunction(function_name);
-    if (!copy_to_row_index_buffer_function) {
-        throw std::runtime_error("failed to find the copy_to_row_index_buffer function");
+    function_name = NS::String::string("copy_to_new_start", NS::ASCIIStringEncoding);
+    auto copy_to_new_start_function = default_library->newFunction(function_name);
+    if (!copy_to_new_start_function) {
+        throw std::runtime_error("failed to find the copy_to_new_start function");
     }
-    copy_to_row_index_buffer_ps = m_device->newComputePipelineState(copy_to_row_index_buffer_function, &error);
-    if (!copy_to_row_index_buffer_ps) {
-        throw std::runtime_error("failed to create the copy_to_row_index_buffer pipeline state object");
+    copy_to_new_start_ps = m_device->newComputePipelineState(copy_to_new_start_function, &error);
+    if (!copy_to_new_start_ps) {
+        throw std::runtime_error("failed to create the copy_to_new_start pipeline state object");
     }
 
     function_name = NS::String::string("add_columns", NS::ASCIIStringEncoding);
@@ -77,10 +77,23 @@ size_t MetalSparseMatrix::size() const {
 }
 
 void MetalSparseMatrix::widenBuffer() {
-    size_t new_size = row_index_size_ * widen_coef_;
-    if (new_size * sizeof(uint32_t) >= (1ll << 32)) {
-        throw std::runtime_error("Out of memory");
+    MTL::Buffer* new_col_start = m_device->newBuffer(n_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+    auto new_col_start_ptr = (uint32_t*)new_col_start->contents();
+    auto col_start_ptr = (uint32_t*)col_start_->contents();
+    auto col_end_ptr = (uint32_t*)col_end_->contents();
+
+    uint32_t cur_col_start = 0;
+    for (size_t i = 0; i < n_; i++) {
+        new_col_start_ptr[i] = cur_col_start;
+
+        uint32_t len = col_end_ptr[i] - col_start_ptr[i];
+        cur_col_start += widen_coef_ * len;
+        if (len != 0) {
+            cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_size_ : col_start_ptr[i + 1]) - col_end_ptr[i];
+        }
     }
+
+    uint32_t new_size = cur_col_start;
 
     row_index_buffer_->release();
     row_index_buffer_ = m_device->newBuffer(new_size * sizeof(uint32_t), MTL::ResourceStorageModeShared);
@@ -90,15 +103,17 @@ void MetalSparseMatrix::widenBuffer() {
         col_start_,
         col_end_,
         row_index_buffer_,
-        widen_coef_buffer_,
+        new_col_start,
     };
-    sendComputeCommand(copy_to_row_index_buffer_ps, buffers);
+    sendComputeCommand(copy_to_new_start_ps, buffers);
 
     row_index_size_ = new_size;
     row_index_->release();
     row_index_ = row_index_buffer_;
 
     row_index_buffer_ = m_device->newBuffer(row_index_size_ * sizeof(uint32_t), MTL::ResourceStorageModeShared);
+
+    new_col_start->release();
 }
 
 void MetalSparseMatrix::readFromFile(const std::string& file_path) {

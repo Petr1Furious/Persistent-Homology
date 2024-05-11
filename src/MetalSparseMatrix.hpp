@@ -37,6 +37,6 @@ private:
     MTL::ComputePipelineState* count_inverse_low_ps;
     MTL::ComputePipelineState* count_to_add_ps;
     MTL::ComputePipelineState* add_columns_ps;
-    MTL::ComputePipelineState* copy_to_row_index_buffer_ps;
+    MTL::ComputePipelineState* copy_to_new_start_ps;
     MTL::CommandQueue* m_command_queue;
 };
