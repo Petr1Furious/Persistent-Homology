@@ -7,10 +7,10 @@
 #include <fstream>
 #include <iostream>
 
-#include "IMatrix.hpp"
-#include "MetalSparseMatrix.hpp"
-#include "ParallelSparseMatrix.hpp"
-#include "SparseMatrix.hpp"
+#include <IMatrix.hpp>
+#include <MetalSparseMatrix.hpp>
+#include <ParallelSparseMatrix.hpp>
+#include <SparseMatrix.hpp>
 
 int main(int argc, const char* argv[]) {
     if (argc != 4) {
