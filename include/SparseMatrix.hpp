@@ -12,5 +12,6 @@ class SparseMatrix : public SparseMatrixBase {
         std::vector<uint32_t> reduce(bool run_twist = true) override;
 
     private:
-        void widenBuffer(std::vector<uint32_t>& row_index_buffer, const std::vector<uint32_t>& to_add);
+        void widenBuffer(std::vector<uint32_t>& row_index_buffer,
+                         const std::vector<uint32_t>& to_add);
 };

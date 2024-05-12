@@ -6,7 +6,8 @@
 SparseMatrix::SparseMatrix(const std::string& file_path)
     : SparseMatrixBase(file_path) {}
 
-void SparseMatrix::widenBuffer(std::vector<uint32_t>& row_index_buffer, const std::vector<uint32_t>& to_add) {
+void SparseMatrix::widenBuffer(std::vector<uint32_t>& row_index_buffer,
+                               const std::vector<uint32_t>& to_add) {
     std::vector<uint32_t> new_col_start(n_);
 
     uint32_t cur_col_start = 0;
@@ -16,10 +17,13 @@ void SparseMatrix::widenBuffer(std::vector<uint32_t>& row_index_buffer, const st
         uint32_t len = col_end_[i] - col_start_[i];
         uint32_t cur_to_add = to_add[i];
         if (len != 0) {
-            cur_col_start += (i + 1 != n_ ? col_start_[i + 1] : (uint32_t)row_index_.size()) - col_start_[i];
+            cur_col_start += (i + 1 != n_ ? col_start_[i + 1]
+                                          : (uint32_t)row_index_.size()) -
+                             col_start_[i];
 
             if (cur_to_add != n_) {
-                uint32_t to_add_len = col_end_[cur_to_add] - col_start_[cur_to_add];
+                uint32_t to_add_len =
+                    col_end_[cur_to_add] - col_start_[cur_to_add];
                 cur_col_start += std::max((int)to_add_len - 2, (int)len);
             }
         }

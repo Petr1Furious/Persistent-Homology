@@ -38,15 +38,12 @@ kernel void count_inverse_low(device const uint32_t* row_index,
     }
 }
 
-kernel void count_to_add(device const uint32_t* row_index,
-                         device const uint32_t* col_start,
-                         device const uint32_t* col_end,
-                         device const uint32_t* inverse_low,
-                         device uint32_t* to_add, device const uint32_t* n,
-                         device atomic_uint* is_over,
-                         device const uint32_t* row_index_size,
-                         device atomic_uint* need_widen_buffer,
-                         uint i [[thread_position_in_grid]]) {
+kernel void count_to_add(
+    device const uint32_t* row_index, device const uint32_t* col_start,
+    device const uint32_t* col_end, device const uint32_t* inverse_low,
+    device uint32_t* to_add, device const uint32_t* n,
+    device atomic_uint* is_over, device const uint32_t* row_index_size,
+    device atomic_uint* need_widen_buffer, uint i [[thread_position_in_grid]]) {
     if (col_start[i] == col_end[i]) {
         to_add[i] = *n;
         return;

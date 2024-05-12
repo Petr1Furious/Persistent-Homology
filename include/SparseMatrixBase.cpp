@@ -56,7 +56,8 @@ uint32_t SparseMatrixBase::getLow(uint32_t col_index) const {
                : row_index_[col_end_[col_index] - 1];
 }
 
-bool SparseMatrixBase::enoughSizeForIteration(uint32_t col, uint32_t to_add) const {
+bool SparseMatrixBase::enoughSizeForIteration(uint32_t col,
+                                              uint32_t to_add) const {
     uint32_t len = col_end_[col] - col_start_[col];
     if (len == 0 || to_add == n_) {
         return true;

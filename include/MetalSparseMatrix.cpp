@@ -106,10 +106,13 @@ void MetalSparseMatrix::widenBuffer(MTL::Buffer* to_add) {
         uint32_t len = col_end_ptr[i] - col_start_ptr[i];
         uint32_t to_add = to_add_ptr[i];
         if (len != 0) {
-            cur_col_start += (i + 1 != n_ ? col_start_ptr[i + 1] : row_index_size_) - col_start_ptr[i];
+            cur_col_start +=
+                (i + 1 != n_ ? col_start_ptr[i + 1] : row_index_size_) -
+                col_start_ptr[i];
 
             if (to_add != n_) {
-                uint32_t to_add_len = col_end_ptr[to_add] - col_start_ptr[to_add];
+                uint32_t to_add_len =
+                    col_end_ptr[to_add] - col_start_ptr[to_add];
                 cur_col_start += std::max((int)to_add_len - 2, (int)len);
             }
         }
@@ -274,8 +277,13 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
 
         *is_over_ptr = 1;
         buffers = {
-            row_index_, col_start_, col_end_, inverse_low,
-            to_add,     n_buffer,   is_over,
+            row_index_,
+            col_start_,
+            col_end_,
+            inverse_low,
+            to_add,
+            n_buffer,
+            is_over,
             row_index_size_buffer,
             need_widen_buffer,
         };
@@ -292,12 +300,8 @@ std::vector<uint32_t> MetalSparseMatrix::reduce(bool run_twist) {
         }
 
         buffers = {
-            col_start_,
-            col_end_,
-            row_index_,
-            row_index_buffer_,
-            to_add,
-            n_buffer,
+            col_start_,        col_end_, row_index_,
+            row_index_buffer_, to_add,   n_buffer,
         };
         sendComputeCommand(add_columns_ps, buffers);
     }

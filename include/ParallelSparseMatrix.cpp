@@ -62,12 +62,13 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
             uint32_t cur_low = getLow(i);
             if (cur_low != n_) {
                 while (true) {
-                    uint32_t cur_value = inverse_low[cur_low].load();
+                    uint32_t cur_value =
+                        inverse_low[cur_low].load(std::memory_order_relaxed);
                     if (i > cur_value) {
                         break;
                     }
-                    if (inverse_low[cur_low].compare_exchange_weak(cur_value,
-                                                                   i)) {
+                    if (inverse_low[cur_low].compare_exchange_weak(
+                            cur_value, i, std::memory_order_relaxed)) {
                         break;
                     }
                 }
@@ -76,11 +77,14 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
 
         addTasksAndWait(pool, n_, [&](size_t i) {
             uint32_t cur_low = getLow(i);
-            if (cur_low != n_ && inverse_low[cur_low].load() != i) {
-                to_add[i] = inverse_low[cur_low].load();
+            if (cur_low != n_ &&
+                inverse_low[cur_low].load(std::memory_order_relaxed) != i) {
+                to_add[i] =
+                    inverse_low[cur_low].load(std::memory_order_relaxed);
             }
 
-            if (!need_widen_buffer.load() && !enoughSizeForIteration(i, to_add[i])) {
+            if (!need_widen_buffer.load() &&
+                !enoughSizeForIteration(i, to_add[i])) {
                 need_widen_buffer.store(true, std::memory_order_relaxed);
             }
         });
