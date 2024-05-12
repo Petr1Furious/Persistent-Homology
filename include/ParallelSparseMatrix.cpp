@@ -79,6 +79,10 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
             if (cur_low != n_ && inverse_low[cur_low].load() != i) {
                 to_add[i] = inverse_low[cur_low].load();
             }
+
+            if (!need_widen_buffer.load() && !enoughSizeForIteration(i, to_add[i])) {
+                need_widen_buffer.store(true, std::memory_order_relaxed);
+            }
         });
 
         bool is_over = true;
@@ -132,9 +136,6 @@ std::vector<uint32_t> ParallelSparseMatrix::reduce(bool run_twist) {
         addTasksAndWait(pool, n_, [&](size_t i) {
             if (to_add[i] != n_) {
                 addColumn(i, to_add[i], row_index_buffer);
-                if (!need_widen_buffer.load() && !enoughSizeForIteration(i)) {
-                    need_widen_buffer.store(true);
-                }
                 to_add[i] = n_;
             }
 

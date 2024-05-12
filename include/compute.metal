@@ -44,6 +44,8 @@ kernel void count_to_add(device const uint32_t* row_index,
                          device const uint32_t* inverse_low,
                          device uint32_t* to_add, device const uint32_t* n,
                          device atomic_uint* is_over,
+                         device const uint32_t* row_index_size,
+                         device atomic_uint* need_widen_buffer,
                          uint i [[thread_position_in_grid]]) {
     if (col_start[i] == col_end[i]) {
         to_add[i] = *n;
@@ -57,6 +59,18 @@ kernel void count_to_add(device const uint32_t* row_index,
     } else {
         to_add[i] = low_inverse;
         atomic_store_explicit(is_over, 0, memory_order_relaxed);
+
+        uint32_t len = col_end[low_inverse] - col_start[low_inverse];
+        uint32_t available;
+        if (i + 1 != *n) {
+            available = col_start[i + 1] - col_end[i];
+        } else {
+            available = *row_index_size - col_end[i];
+        }
+
+        if (len > available + 2) {
+            atomic_store_explicit(need_widen_buffer, 1, memory_order_relaxed);
+        }
     }
 }
 
@@ -82,8 +96,6 @@ kernel void add_columns(device const uint32_t* col_start,
                         device uint32_t* col_end, device uint32_t* row_index,
                         device uint32_t* row_index_buffer,
                         device uint32_t* to_add, device const uint32_t* n,
-                        device const uint32_t* row_index_size,
-                        device atomic_uint* need_widen_buffer,
                         uint add_to [[thread_position_in_grid]]) {
     if (to_add[add_to] == *n) {
         return;
@@ -126,18 +138,4 @@ kernel void add_columns(device const uint32_t* col_start,
         row_index[i] = row_index_buffer[i];
     }
     col_end[add_to] = k;
-
-    to_add[add_to] = *n;
-
-    uint32_t len = col_end[add_to] - col_start[add_to];
-    uint32_t available;
-    if (add_to + 1 != *n) {
-        available = col_start[add_to + 1] - col_start[add_to];
-    } else {
-        available = *row_index_size - col_start[add_to];
-    }
-
-    if (len * 2 > available) {
-        atomic_store_explicit(need_widen_buffer, 1, memory_order_relaxed);
-    }
 }

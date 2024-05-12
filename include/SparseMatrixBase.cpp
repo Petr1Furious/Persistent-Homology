@@ -48,9 +48,6 @@ void SparseMatrixBase::readFromFile(const std::string& file_path) {
         }
         i++;
     }
-
-    std::vector<uint32_t> row_index_buffer;
-    widenBuffer(row_index_buffer);
 }
 
 uint32_t SparseMatrixBase::getLow(uint32_t col_index) const {
@@ -59,13 +56,21 @@ uint32_t SparseMatrixBase::getLow(uint32_t col_index) const {
                : row_index_[col_end_[col_index] - 1];
 }
 
-bool SparseMatrixBase::enoughSizeForIteration(uint32_t col) const {
-    uint32_t col_size = col_end_[col] - col_start_[col];
-    uint32_t available_size =
-        (col + 1 < n_)
-            ? col_start_[col + 1] - col_start_[col]
-            : static_cast<uint32_t>(row_index_.size()) - col_start_[col];
-    return col_size * 2 <= available_size;
+bool SparseMatrixBase::enoughSizeForIteration(uint32_t col, uint32_t to_add) const {
+    uint32_t len = col_end_[col] - col_start_[col];
+    if (len == 0 || to_add == n_) {
+        return true;
+    }
+
+    uint32_t available_size;
+    if (col + 1 < n_) {
+        available_size = col_start_[col + 1] - col_start_[col];
+    } else {
+        available_size = row_index_.size() - col_start_[col];
+    }
+
+    uint32_t to_add_len = col_end_[to_add] - col_start_[to_add];
+    return len + std::max(to_add_len - 2, len) <= available_size;
 }
 
 void SparseMatrixBase::addColumn(uint32_t add_to, uint32_t add_from,
@@ -115,42 +120,6 @@ void SparseMatrixBase::addColumn(uint32_t add_to, uint32_t add_from,
         row_index_[i] = row_index_buffer[i];
     }
     col_end_[add_to] = k;
-}
-
-void SparseMatrixBase::widenBuffer(std::vector<uint32_t>& row_index_buffer) {
-    std::vector<uint32_t> new_col_start(n_);
-
-    uint32_t cur_col_start = 0;
-    for (size_t i = 0; i < n_; i++) {
-        new_col_start[i] = cur_col_start;
-
-        uint32_t len = col_end_[i] - col_start_[i];
-        cur_col_start += widen_coef_ * len;
-        if (len != 0) {
-            cur_col_start += (i == n_ - 1 ? (uint32_t)row_index_.size()
-                                          : col_start_[i + 1]) -
-                             col_end_[i];
-        }
-    }
-
-    uint32_t new_size = cur_col_start;
-
-    row_index_buffer.resize(new_size, 0);
-
-    for (size_t i = 0; i < n_; i++) {
-        int start = col_start_[i];
-        int end = col_end_[i];
-        int new_start = new_col_start[i];
-
-        std::copy(row_index_.begin() + start, row_index_.begin() + end,
-                  row_index_buffer.begin() + new_start);
-
-        col_start_[i] = new_start;
-        col_end_[i] = new_start + (end - start);
-    }
-
-    row_index_.resize(new_size, 0);
-    std::swap(row_index_, row_index_buffer);
 }
 
 std::vector<uint32_t> SparseMatrixBase::getLowArray() const {

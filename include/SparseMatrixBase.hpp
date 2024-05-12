@@ -16,12 +16,10 @@ class SparseMatrixBase : public IMatrix {
 
         uint32_t getLow(uint32_t col_index) const;
 
-        bool enoughSizeForIteration(uint32_t col) const;
+        bool enoughSizeForIteration(uint32_t col, uint32_t to_add) const;
 
         void addColumn(uint32_t col1, uint32_t col2,
                        std::vector<uint32_t>& row_index_buffer);
-
-        void widenBuffer(std::vector<uint32_t>& row_index_buffer);
 
         void runTwist();
 

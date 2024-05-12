@@ -15,7 +15,7 @@ class MetalSparseMatrix : public IMatrix {
         ~MetalSparseMatrix();
 
     private:
-        void widenBuffer();
+        void widenBuffer(MTL::Buffer* need_widen_buffer);
 
         void readFromFile(const std::string& file_path);
 
@@ -29,8 +29,6 @@ class MetalSparseMatrix : public IMatrix {
         size_t row_index_size_;
         MTL::Buffer* row_index_;
         MTL::Buffer* row_index_buffer_;
-        const uint32_t widen_coef_ = 2;
-        MTL::Buffer* widen_coef_buffer_;
 
         NS::AutoreleasePool* m_pool;
         MTL::Device* m_device;
